@@ -1,28 +1,38 @@
+# worker.py
+import os
 import time
 import telebot
-import sqlite3
-from datetime import datetime
+import schedule
+from db import SessionLocal, init_db
+from models import User
+from sqlalchemy.orm import Session
 
-BOT_TOKEN = "8587007298:AAFkoi5ovkasDTHYRLw4oCVTOc0XDssi92w"
+TOKEN = os.environ.get("BOT_TOKEN")
+bot = telebot.TeleBot(TOKEN)
 
-bot = telebot.TeleBot(BOT_TOKEN)
+init_db()
 
-def trimite_mesaje_programate():
-    while True:
-        conn = sqlite3.connect("users.db")
-        cursor = conn.cursor()
-
-        cursor.execute("SELECT user_id FROM users")
-        users = cursor.fetchall()
-
-        for user in users:
+def send_daily():
+    db = SessionLocal()
+    try:
+        users = db.query(User).filter_by(subscribed=True).all()
+        for u in users:
             try:
-                bot.send_message(user[0], "🔔 Mesaj automat de test")
-            except:
+                bot.send_message(u.tg_id, "📢 Ежедневная рассылка: советы по безопасности.")
+            except Exception:
                 pass
+    finally:
+        db.close()
 
-        conn.close()
-        time.sleep(3600) # trimite la 1 oră
+# schedule: daily at env DAILY_HOUR (format "09:00")
+DAILY_HOUR = os.environ.get("DAILY_HOUR", "09:00")
+schedule.every().day.at(DAILY_HOUR).do(send_daily)
+schedule.every().monday.at(DAILY_HOUR).do(send_daily)  # example
+
+def run_scheduler():
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
 
 if __name__ == "__main__":
-    trimite_mesaje_programate()
+    run_scheduler()
